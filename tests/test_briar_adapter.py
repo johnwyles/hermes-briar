@@ -6,12 +6,10 @@ Run from repo root with pytest targeting this file.
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import yaml
 
 from plugins.platforms.briar.adapter import (
     BriarAdapter,
@@ -52,13 +50,13 @@ class FakeSession:
         self.calls = []
         self.closed = False
 
-    async def get(self, url, params=None, timeout=None):
+    def get(self, url, params=None, timeout=None):
         self.calls.append(("get", url, params))
         if url.endswith("/status"):
             return self.status_resp
         return self.messages_resp
 
-    async def post(self, url, json=None, timeout=None):
+    def post(self, url, json=None, timeout=None):
         self.calls.append(("post", url, json))
         return self.send_resp
 
