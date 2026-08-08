@@ -21,6 +21,7 @@ class BriarAdapter(BasePlatformAdapter):
         self.allowed_users = self._parse_allowed_users()
         self._session: Optional[aiohttp.ClientSession] = None
         self._poll_task: Optional[asyncio.Task] = None
+        self._last_timestamp: float = 0.0
 
     def _parse_allowed_users(self) -> List[str]:
         raw = os.getenv("BRIAR_ALLOWED_USERS", "")
@@ -32,21 +33,27 @@ class BriarAdapter(BasePlatformAdapter):
         if not self.api_url or not self.contact_id:
             return False
         try:
-            self._session = aiohttp.ClientSession()
+            session = aiohttp.ClientSession()
             # Verify bridge reachability
-            async with self._session.get(f"{self.api_url}/status", timeout=5) as resp:
+            async with session.get(f"{self.api_url}/status", timeout=5) as resp:
                 if resp.status != 200:
+                    await session.close()
                     return False
+            self._session = session
             self._mark_connected()
             self._poll_task = asyncio.create_task(self._poll_messages())
             return True
         except Exception:
-            await self._safe_disconnect()
+            self._session = None
             return False
 
     async def disconnect(self) -> None:
         if self._poll_task:
             self._poll_task.cancel()
+            try:
+                await self._poll_task
+            except asyncio.CancelledError:
+                pass
             self._poll_task = None
         await self._safe_disconnect()
         self._mark_disconnected()
@@ -98,6 +105,8 @@ class BriarAdapter(BasePlatformAdapter):
                     await asyncio.sleep(backoff)
                     continue
                 params = {"contact_id": self.contact_id}
+                if self._last_timestamp:
+                    params["since"] = str(self._last_timestamp)
                 async with self._session.get(
                     f"{self.api_url}/messages",
                     params=params,
@@ -106,12 +115,18 @@ class BriarAdapter(BasePlatformAdapter):
                     if resp.status == 200:
                         data = await resp.json()
                         messages = data if isinstance(data, list) else data.get("messages", [])
-                        for msg in messages:
+                        new_messages = [m for m in messages if m.get("timestamp", 0) > self._last_timestamp]
+                        for msg in new_messages:
                             await self._handle_incoming(msg)
+                        if new_messages:
+                            self._last_timestamp = max(
+                                self._last_timestamp,
+                                max(m.get("timestamp", 0) for m in new_messages),
+                            )
                         backoff = 1
                     else:
-                        await asyncio.sleep(backoff)
                         backoff = min(backoff * 2, 60)
+                await asyncio.sleep(0.5)
             except asyncio.CancelledError:
                 break
             except Exception:

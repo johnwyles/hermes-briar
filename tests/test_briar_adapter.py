@@ -182,7 +182,7 @@ class TestBriarAdapterLifecycle:
             task = adapter._poll_task
             assert task is not None
         await adapter.disconnect()
-        assert task.cancelled()
+        assert task.done()
         assert session.closed is True
 
 
@@ -240,7 +240,7 @@ class TestBriarAdapterInbound:
             adapter = BriarAdapter(make_config(extra={"api_url": "http://127.0.0.1:7000", "contact_id": "me"}))
             adapter.dispatch = dispatch
             await adapter.connect()
-            await asyncio.sleep(0)
+            await asyncio.sleep(0.8)
         assert dispatch.call_count == 1
         event = dispatch.call_args[0][0]
         assert event.text == "hi"
@@ -263,7 +263,7 @@ class TestBriarAdapterInbound:
             adapter.allowed_users = ["allowed"]
             adapter.dispatch = dispatch
             await adapter.connect()
-            await asyncio.sleep(0)
+            await asyncio.sleep(0.8)
         assert dispatch.call_count == 1
         event = dispatch.call_args[0][0]
         assert event.sender_id == "allowed"
@@ -282,6 +282,6 @@ class TestBriarAdapterInbound:
             adapter = BriarAdapter(make_config(extra={"api_url": "http://127.0.0.1:7000", "contact_id": "me"}))
             adapter.dispatch = dispatch
             await adapter.connect()
-            await asyncio.sleep(0)
+            await asyncio.sleep(0.8)
         assert dispatch.call_count == 0
         await adapter.disconnect()
